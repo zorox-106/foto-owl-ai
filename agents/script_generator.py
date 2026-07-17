@@ -222,28 +222,34 @@ def _clean_script(script: str) -> str:
 
 
 def script_generator_agent(state: PipelineState) -> dict:
-    """Generate the Remotion TypeScript composition from the storyboard."""
+    """Generate the Remotion TypeScript composition from the storyboard or fix compile errors."""
     storyboard: Storyboard = state["storyboard"]
     intent: VideoIntent = state["video_intent"]
+    compile_errors = state.get("compile_errors", [])
 
-    print("[ScriptGenerator] Retrieving Remotion API context from RAG...")
-    rag_context = _build_rag_context()
-
-    print("[ScriptGenerator] Generating Remotion composition script...")
-    prompt = _storyboard_to_prompt(storyboard, intent)
-
-    # Route: prefer Claude Sonnet; fall back to GPT-4o if no Anthropic key
-    anthropic_key = os.getenv("ANTHROPIC_API_KEY", "")
-    if anthropic_key and not anthropic_key.startswith("sk-ant-placeholder"):
-        script = _generate_with_anthropic(prompt, rag_context)
-        print("[ScriptGenerator] Script generated via Claude Sonnet.")
+    if compile_errors:
+        print(f"[ScriptGenerator] Fixing compile errors (retry attempt {state.get('retry_count', 0)})...")
+        from agents.compiler_fixer import _fix_script
+        script = _fix_script(state["remotion_script"], compile_errors)
     else:
-        script = _generate_with_openai(prompt, rag_context)
-        print("[ScriptGenerator] Script generated via GPT-4o (fallback).")
+        print("[ScriptGenerator] Retrieving Remotion API context from RAG...")
+        rag_context = _build_rag_context()
+
+        print("[ScriptGenerator] Generating Remotion composition script...")
+        prompt = _storyboard_to_prompt(storyboard, intent)
+
+        # Route: prefer Claude Sonnet; fall back to GPT-4o if no Anthropic key
+        anthropic_key = os.getenv("ANTHROPIC_API_KEY", "")
+        if anthropic_key and not anthropic_key.startswith("sk-ant-placeholder"):
+            script = _generate_with_anthropic(prompt, rag_context)
+            print("[ScriptGenerator] Script generated via Claude Sonnet.")
+        else:
+            script = _generate_with_openai(prompt, rag_context)
+            print("[ScriptGenerator] Script generated via GPT-4o (fallback).")
 
     return {
         "remotion_script": script,
         "compile_success": False,
-        "compile_errors": [],
+        "compile_errors": [],  # clear errors for the next compile check
         "retry_count": state.get("retry_count", 0),
     }

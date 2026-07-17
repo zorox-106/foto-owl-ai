@@ -120,7 +120,14 @@ class TestPipelineIntegration:
         mock_generate_script.return_value = "export const EventReel = () => null;"
 
         # Mock compiler returning error every single time to trigger max retries
-        mock_tsc.return_value = ["EventReel.tsx:1:1 - error TS1005: ';' expected."]
+        from models.state import CompileError
+        compile_error = CompileError(
+            error_type="TypeScript",
+            message="EventReel.tsx:1:1 - error TS1005: ';' expected.",
+            line_number=1,
+            relevant_api_snippet="Compiler helper docs"
+        )
+        mock_tsc.return_value = [compile_error]
         mock_compiler_rag.return_value = ["Compiler helper docs"]
         mock_fix.return_value = "export const EventReel = () => null; // Fixed but still failing"
 

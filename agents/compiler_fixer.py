@@ -78,7 +78,7 @@ def _classify_error(message: str) -> CompileError:
     )
 
 
-def _run_tsc(script: str) -> List[str]:
+def _run_tsc(script: str) -> List[CompileError]:
     """Write script into the Remotion project and run tsc from there.
 
     Running tsc inside the Remotion project ensures remotion's type definitions
@@ -109,11 +109,13 @@ def _run_tsc(script: str) -> List[str]:
                 return []
             raw = (result.stdout + result.stderr).strip()
             # Filter to only lines referencing EventReel.tsx to avoid irrelevant Root.tsx errors
-            errors = [
+            raw_errors = [
                 line for line in raw.splitlines()
                 if line.strip() and ("EventReel" in line or "error TS" in line)
             ]
-            return errors or _basic_syntax_check(script)
+            if not raw_errors:
+                return _basic_syntax_check(script)
+            return [_classify_error(e) for e in raw_errors[:10]]
         except FileNotFoundError:
             print("[Compiler] ⚠️  npx not found — running basic syntax check")
             return _basic_syntax_check(script)
@@ -123,20 +125,35 @@ def _run_tsc(script: str) -> List[str]:
             script_path.write_text(original, encoding="utf-8")
 
 
-def _basic_syntax_check(script: str) -> List[str]:
+def _basic_syntax_check(script: str) -> List[CompileError]:
     """Fallback: detect obvious syntax errors without tsc."""
     errors = []
     # Check for common issues
     open_braces = script.count("{")
     close_braces = script.count("}")
     if abs(open_braces - close_braces) > 2:
-        errors.append(f"Brace mismatch: {open_braces} open, {close_braces} close")
+        errors.append(CompileError(
+            error_type="Syntax",
+            message=f"Brace mismatch: {open_braces} open, {close_braces} close",
+            line_number=None,
+            relevant_api_snippet="Ensure all open braces '{' are closed with '}'."
+        ))
 
     if "registerRoot" not in script:
-        errors.append("Missing registerRoot() call")
+        errors.append(CompileError(
+            error_type="Syntax",
+            message="Missing registerRoot() call",
+            line_number=None,
+            relevant_api_snippet="import { registerRoot } from 'remotion'; registerRoot(RemotionRoot);"
+        ))
 
     if "export default" not in script and "export const EventReel" not in script:
-        errors.append("Missing default export for EventReel composition")
+        errors.append(CompileError(
+            error_type="Syntax",
+            message="Missing default export for EventReel composition",
+            line_number=None,
+            relevant_api_snippet="export default EventReel;"
+        ))
 
     return errors
 
@@ -201,8 +218,8 @@ def compiler_fixer_agent(state: PipelineState) -> dict:
             "retry_count": retry_count,
         }
 
-    print(f"[CompilerFixer] ❌ {len(raw_errors)} error(s) found. Enriching with RAG...")
-    compile_errors = [_classify_error(e) for e in raw_errors[:10]]  # cap at 10 errors
+    print(f"[CompilerFixer] ❌ {len(raw_errors)} error(s) found.")
+    compile_errors = raw_errors
 
     if retry_count + 1 >= max_retries:
         print(f"[CompilerFixer] Max retries ({max_retries}) reached. Emitting failure report.")
@@ -223,11 +240,7 @@ def compiler_fixer_agent(state: PipelineState) -> dict:
             "pipeline_status": "failed",
         }
 
-    print(f"[CompilerFixer] Fixing script (retry {retry_count + 1})...")
-    fixed_script = _fix_script(script, compile_errors)
-
     return {
-        "remotion_script": fixed_script,
         "compile_success": False,
         "compile_errors": compile_errors,
         "retry_count": retry_count + 1,

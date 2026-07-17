@@ -22,17 +22,17 @@ class TestCompilerFixer:
         assert len(result["compile_errors"]) == 0
 
     def test_compiler_failure_triggers_fix(self, base_state):
-        """If tsc has errors, the agent calls the LLM to fix the script and increments retry count."""
-        raw_error = "EventReel.tsx:12:34 - error TS2307: Cannot find module 'remotion'."
-        fixed_script = "export const EventReelFixed = () => null;"
+        """If tsc has errors, compiler agent maps them to CompileError list and passes them back in the state."""
+        from models.state import CompileError
+        compile_error = CompileError(
+            error_type="TypeScript",
+            message="EventReel.tsx:12:34 - error TS2307: Cannot find module 'remotion'.",
+            line_number=12,
+            relevant_api_snippet="Mock API documentation"
+        )
 
-        with patch("agents.compiler_fixer._run_tsc") as mock_tsc, \
-             patch("agents.compiler_fixer.retrieve") as mock_retrieve, \
-             patch("agents.compiler_fixer._fix_script") as mock_fix:
-
-            mock_tsc.return_value = [raw_error]
-            mock_retrieve.return_value = ["Mock API documentation"]
-            mock_fix.return_value = fixed_script
+        with patch("agents.compiler_fixer._run_tsc") as mock_tsc:
+            mock_tsc.return_value = [compile_error]
 
             from agents.compiler_fixer import compiler_fixer_agent
 
@@ -46,18 +46,21 @@ class TestCompilerFixer:
         assert len(result["compile_errors"]) == 1
         assert result["compile_errors"][0].error_type == "TypeScript"
         assert result["compile_errors"][0].line_number == 12
-        assert result["remotion_script"] == fixed_script
+        assert "remotion_script" not in result  # Not modified by the compiler fixer itself anymore
         assert result["retry_count"] == 1
 
     def test_max_retries_emits_failure_report(self, base_state):
         """When retry count hits max_retries, it must emit a FailureReport and terminate."""
-        raw_error = "EventReel.tsx:5:10 - error TS2554: Expected 2 arguments, but got 1."
+        from models.state import CompileError
+        compile_error = CompileError(
+            error_type="TypeScript",
+            message="EventReel.tsx:5:10 - error TS2554: Expected 2 arguments, but got 1.",
+            line_number=5,
+            relevant_api_snippet="Mock API doc"
+        )
 
-        with patch("agents.compiler_fixer._run_tsc") as mock_tsc, \
-             patch("agents.compiler_fixer.retrieve") as mock_retrieve:
-
-            mock_tsc.return_value = [raw_error]
-            mock_retrieve.return_value = ["Mock API doc"]
+        with patch("agents.compiler_fixer._run_tsc") as mock_tsc:
+            mock_tsc.return_value = [compile_error]
 
             from agents.compiler_fixer import compiler_fixer_agent
 
