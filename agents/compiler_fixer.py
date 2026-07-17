@@ -23,7 +23,7 @@ import tempfile
 from pathlib import Path
 from typing import List
 
-from models import oai
+from models import get_fixer_model
 from models.state import CompileError, FailureReport, PipelineState
 from rag import retrieve
 
@@ -159,8 +159,11 @@ def _basic_syntax_check(script: str) -> List[CompileError]:
 
 
 def _fix_script(script: str, errors: List[CompileError]) -> str:
-    """Use gpt-4o-mini to fix the script given the structured errors."""
-    model = os.getenv("COMPILER_FIXER_MODEL", "gpt-4o-mini")
+    """Use the centrally-routed fixer model to fix the script given the structured errors."""
+    from openai import OpenAI, RateLimitError
+    import time
+
+    client, model = get_fixer_model()
 
     error_text = "\n\n".join(
         f"Error {i+1} ({e.error_type}, line {e.line_number}):\n"
@@ -169,14 +172,9 @@ def _fix_script(script: str, errors: List[CompileError]) -> str:
         for i, e in enumerate(errors)
     )
 
-    from openai import OpenAI, RateLimitError
-    import time
-    base_url = os.environ.get("OPENAI_BASE_URL")
-    raw_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"], base_url=base_url)
-
     for attempt in range(3):
         try:
-            response = raw_client.chat.completions.create(
+            response = client.chat.completions.create(
                 model=model,
                 messages=[
                     {"role": "system", "content": _FIX_SYSTEM},

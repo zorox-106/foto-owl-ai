@@ -23,10 +23,10 @@ class TestIntentParser:
             style_keywords=["cinematic", "wedding"],
         )
 
-        with patch("agents.intent_parser.oai") as mock_oai:
+        with patch("agents.intent_parser.get_intent_model") as mock_get_model:
             mock_client = MagicMock()
             mock_client.chat.completions.create.return_value = mock_intent
-            mock_oai.return_value = mock_client
+            mock_get_model.return_value = (mock_client, "test-model")
 
             from agents.intent_parser import intent_parser_agent
 
@@ -53,10 +53,10 @@ class TestIntentParser:
             style_keywords=["upbeat", "sports"],
         )
 
-        with patch("agents.intent_parser.oai") as mock_oai:
+        with patch("agents.intent_parser.get_intent_model") as mock_get_model:
             mock_client = MagicMock()
             mock_client.chat.completions.create.return_value = mock_intent
-            mock_oai.return_value = mock_client
+            mock_get_model.return_value = (mock_client, "test-model")
 
             from agents.intent_parser import intent_parser_agent
 
@@ -83,10 +83,10 @@ class TestIntentParser:
                 style_keywords=[style],
             )
 
-            with patch("agents.intent_parser.oai") as mock_oai:
+            with patch("agents.intent_parser.get_intent_model") as mock_get_model:
                 mock_client = MagicMock()
                 mock_client.chat.completions.create.return_value = mock_intent
-                mock_oai.return_value = mock_client
+                mock_get_model.return_value = (mock_client, "test-model")
 
                 from agents.intent_parser import intent_parser_agent
                 result = intent_parser_agent({"raw_prompt": f"{style} style video"})

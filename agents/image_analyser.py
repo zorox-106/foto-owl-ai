@@ -21,7 +21,7 @@ import os
 from pathlib import Path
 from typing import List
 
-from models import oai
+from models import get_vision_model
 from models.state import ImageAnalysis, PipelineState, VideoIntent
 
 _MAX_IMAGES = int(os.getenv("MAX_IMAGES", "12"))
@@ -51,7 +51,7 @@ def _analyse_single(path: str, intent: VideoIntent) -> ImageAnalysis:
             "Falling back to heuristic description."
         )
 
-    model = os.getenv("IMAGE_ANALYSER_MODEL", "gpt-4o")
+    client, model = get_vision_model()
     ext = Path(path).suffix.lower().lstrip(".")
     mime = "image/jpeg" if ext in ("jpg", "jpeg") else f"image/{ext}"
 
@@ -75,7 +75,7 @@ def _analyse_single(path: str, intent: VideoIntent) -> ImageAnalysis:
         },
     ]
 
-    result: ImageAnalysis = oai().chat.completions.create(
+    result: ImageAnalysis = client.chat.completions.create(
         model=model,
         response_model=ImageAnalysis,
         messages=[

@@ -23,6 +23,7 @@ from pathlib import Path
 from textwrap import dedent
 from typing import List
 
+from models import get_script_model
 from models.state import PipelineState, Scene, Storyboard, VideoIntent
 from rag import retrieve
 
@@ -123,30 +124,26 @@ Constraints:
 _SYSTEM_OPENAI = _SYSTEM_ANTHROPIC  # Same instructions, same constraints
 
 
-def _generate_with_anthropic(prompt: str, rag_context: str) -> str:
-    from anthropic import Anthropic
-    client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-    model = os.getenv("SCRIPT_GENERATOR_MODEL", "claude-sonnet-4-5")
-
-    response = client.messages.create(
-        model=model,
-        max_tokens=4096,
-        system=_SYSTEM_ANTHROPIC + f"\n\n=== REMOTION API REFERENCE ===\n{rag_context}",
-        messages=[
-            {"role": "user", "content": f"Generate the Remotion composition script:\n\n{prompt}"}
-        ],
-    )
-    return _clean_script(response.content[0].text)  # type: ignore[index]
-
-
-def _generate_with_openai(prompt: str, rag_context: str) -> str:
+def _generate_script(prompt: str, rag_context: str) -> str:
+    """Generate the Remotion TypeScript script using the centrally-routed model."""
     import time
+    from anthropic import Anthropic
     from openai import OpenAI, RateLimitError
-    # Honour OPENAI_BASE_URL so Groq / other OpenAI-compatible providers work
-    base_url = os.environ.get("OPENAI_BASE_URL")
-    client = OpenAI(api_key=os.environ["OPENAI_API_KEY"], base_url=base_url)
-    model = os.getenv("SCRIPT_GENERATOR_MODEL", "gpt-4o")
+    client, model = get_script_model()
 
+    if isinstance(client, Anthropic):
+        response = client.messages.create(
+            model=model,
+            max_tokens=4096,
+            system=_SYSTEM_ANTHROPIC + f"\n\n=== REMOTION API REFERENCE ===\n{rag_context}",
+            messages=[
+                {"role": "user", "content": f"Generate the Remotion composition script:\n\n{prompt}"}
+            ],
+        )
+        provider = "Claude (Anthropic)"
+        return _clean_script(response.content[0].text)  # type: ignore[index]
+
+    # OpenAI / Groq compatible path
     for attempt in range(3):
         try:
             response = client.chat.completions.create(
@@ -164,32 +161,16 @@ def _generate_with_openai(prompt: str, rag_context: str) -> str:
                 max_tokens=4096,
             )
             return _clean_script(response.choices[0].message.content or "")
-        except RateLimitError as e:
+        except RateLimitError:
             wait = 25 * (attempt + 1)  # 25s, 50s, 75s
             print(f"[ScriptGenerator] Rate limit hit — waiting {wait}s before retry {attempt + 1}/3...")
             time.sleep(wait)
-    # Last attempt without catching
+    # Final attempt — let any error propagate
     response = client.chat.completions.create(
         model=model,
         messages=[
             {"role": "system", "content": _SYSTEM_OPENAI + f"\n\n=== REMOTION API REFERENCE ===\n{rag_context}"},
             {"role": "user", "content": f"Generate the Remotion composition script:\n\n{prompt}"},
-        ],
-        max_tokens=4096,
-    )
-    return _clean_script(response.choices[0].message.content or "")
-
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
-            {
-                "role": "system",
-                "content": _SYSTEM_OPENAI + f"\n\n=== REMOTION API REFERENCE ===\n{rag_context}",
-            },
-            {
-                "role": "user",
-                "content": f"Generate the Remotion composition script:\n\n{prompt}",
-            },
         ],
         max_tokens=4096,
     )
@@ -238,14 +219,8 @@ def script_generator_agent(state: PipelineState) -> dict:
         print("[ScriptGenerator] Generating Remotion composition script...")
         prompt = _storyboard_to_prompt(storyboard, intent)
 
-        # Route: prefer Claude Sonnet; fall back to GPT-4o if no Anthropic key
-        anthropic_key = os.getenv("ANTHROPIC_API_KEY", "")
-        if anthropic_key and not anthropic_key.startswith("sk-ant-placeholder"):
-            script = _generate_with_anthropic(prompt, rag_context)
-            print("[ScriptGenerator] Script generated via Claude Sonnet.")
-        else:
-            script = _generate_with_openai(prompt, rag_context)
-            print("[ScriptGenerator] Script generated via GPT-4o (fallback).")
+        script = _generate_script(prompt, rag_context)
+        print("[ScriptGenerator] Script generated via model router.")
 
     return {
         "remotion_script": script,

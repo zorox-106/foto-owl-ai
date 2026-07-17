@@ -11,8 +11,7 @@ at ~5–10× lower cost than gpt-4o, with negligible quality difference.
 """
 from __future__ import annotations
 
-import os
-from models import oai
+from models import get_intent_model
 from models.state import PipelineState, VideoIntent
 
 
@@ -29,9 +28,9 @@ Guidelines:
 
 def intent_parser_agent(state: PipelineState) -> dict:
     """Parse the raw prompt into a VideoIntent and return it as a state patch."""
-    model = os.getenv("INTENT_PARSER_MODEL", "gpt-4o-mini")
+    client, model = get_intent_model()
 
-    intent: VideoIntent = oai().chat.completions.create(
+    intent: VideoIntent = client.chat.completions.create(
         model=model,
         response_model=VideoIntent,
         messages=[

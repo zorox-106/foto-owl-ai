@@ -6,6 +6,15 @@ import instructor
 from openai import OpenAI
 from anthropic import Anthropic
 
+# Re-export model router functions
+from models.model_router import (
+    get_intent_model,
+    get_vision_model,
+    get_storyboard_model,
+    get_script_model,
+    get_fixer_model,
+)
+
 
 @lru_cache(maxsize=1)
 def oai() -> instructor.Instructor:

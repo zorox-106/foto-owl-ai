@@ -32,7 +32,7 @@ class TestStoryboardWriter:
         )
 
         with patch("agents.storyboard_writer.retrieve") as mock_retrieve, \
-             patch("agents.storyboard_writer.oai") as mock_oai:
+             patch("agents.storyboard_writer.get_storyboard_model") as mock_get_model:
 
             # Mock RAG retrieval
             mock_retrieve.return_value = ["Mocked cinematic style guide content."]
@@ -40,7 +40,7 @@ class TestStoryboardWriter:
             # Mock LLM call
             mock_client = MagicMock()
             mock_client.chat.completions.create.return_value = mock_storyboard
-            mock_oai.return_value = mock_client
+            mock_get_model.return_value = (mock_client, "test-model")
 
             from agents.storyboard_writer import storyboard_writer_agent
 

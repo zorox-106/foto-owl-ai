@@ -17,7 +17,7 @@ import os
 from pathlib import Path
 from typing import List
 
-from models import oai
+from models import get_storyboard_model
 from models.state import ImageAnalysis, PipelineState, Scene, Storyboard, VideoIntent
 from rag import retrieve
 
@@ -63,9 +63,9 @@ def storyboard_writer_agent(state: PipelineState) -> dict:
 
     image_context = _build_image_context(analyses, selected)
 
-    model = os.getenv("STORYBOARD_MODEL", "gpt-4o-mini")
+    client, model = get_storyboard_model()
 
-    storyboard: Storyboard = oai().chat.completions.create(
+    storyboard: Storyboard = client.chat.completions.create(
         model=model,
         response_model=Storyboard,
         messages=[

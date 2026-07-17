@@ -11,12 +11,12 @@ from models.state import FailureReport
 
 
 class TestPipelineIntegration:
-    @patch("agents.intent_parser.oai")
+    @patch("agents.intent_parser.get_intent_model")
     @patch("agents.image_analyser._analyse_single")
     @patch("agents.storyboard_writer.retrieve")
-    @patch("agents.storyboard_writer.oai")
+    @patch("agents.storyboard_writer.get_storyboard_model")
     @patch("agents.script_generator.retrieve")
-    @patch("agents.script_generator._generate_with_openai")
+    @patch("agents.script_generator._generate_script")
     @patch("agents.compiler_fixer._run_tsc")
     @patch("agents.renderer.subprocess.run")
     def test_successful_pipeline_execution(
@@ -36,10 +36,14 @@ class TestPipelineIntegration:
     ):
         """Test a full successful path of the pipeline graph with mock models and subprocesses."""
         # 1. Setup mocks
-        mock_intent_llm.return_value.chat.completions.create.return_value = video_intent
+        mock_intent_client = MagicMock()
+        mock_intent_client.chat.completions.create.return_value = video_intent
+        mock_intent_llm.return_value = (mock_intent_client, "test-model")
         mock_analyse_image.return_value = image_analysis
         mock_storyboard_rag.return_value = ["Style guide content"]
-        mock_storyboard_llm.return_value.chat.completions.create.return_value = storyboard
+        mock_storyboard_client = MagicMock()
+        mock_storyboard_client.chat.completions.create.return_value = storyboard
+        mock_storyboard_llm.return_value = (mock_storyboard_client, "test-model")
         mock_script_rag.return_value = ["API docs"]
         mock_generate_script.return_value = "export const EventReel = () => null; // Generated script"
         mock_tsc.return_value = []  # Compile success on first try!
@@ -66,8 +70,7 @@ class TestPipelineIntegration:
         output_dir = tmp_path / "out"
 
         with patch("agents.renderer.REMOTION_DIR", remotion_dir), \
-             patch("agents.renderer.OUTPUT_DIR", output_dir), \
-             patch.dict("os.environ", {"ANTHROPIC_API_KEY": ""}):  # Force OpenAI fallback
+             patch("agents.renderer.OUTPUT_DIR", output_dir):
 
             final_state = pipeline.invoke(initial_state)
 
@@ -86,12 +89,12 @@ class TestPipelineIntegration:
         copied_image = remotion_dir / "public" / "test_image.jpg"
         assert copied_image.exists()
 
-    @patch("agents.intent_parser.oai")
+    @patch("agents.intent_parser.get_intent_model")
     @patch("agents.image_analyser._analyse_single")
     @patch("agents.storyboard_writer.retrieve")
-    @patch("agents.storyboard_writer.oai")
+    @patch("agents.storyboard_writer.get_storyboard_model")
     @patch("agents.script_generator.retrieve")
-    @patch("agents.script_generator._generate_with_openai")
+    @patch("agents.script_generator._generate_script")
     @patch("agents.compiler_fixer._run_tsc")
     @patch("agents.compiler_fixer.retrieve")
     @patch("agents.compiler_fixer._fix_script")
@@ -112,10 +115,14 @@ class TestPipelineIntegration:
         tmp_path,
     ):
         """Test that the pipeline loops back to script generation/fixing when compilation fails, and terminates on failure."""
-        mock_intent_llm.return_value.chat.completions.create.return_value = video_intent
+        mock_intent_client = MagicMock()
+        mock_intent_client.chat.completions.create.return_value = video_intent
+        mock_intent_llm.return_value = (mock_intent_client, "test-model")
         mock_analyse_image.return_value = image_analysis
         mock_storyboard_rag.return_value = ["Style guide content"]
-        mock_storyboard_llm.return_value.chat.completions.create.return_value = storyboard
+        mock_storyboard_client = MagicMock()
+        mock_storyboard_client.chat.completions.create.return_value = storyboard
+        mock_storyboard_llm.return_value = (mock_storyboard_client, "test-model")
         mock_script_rag.return_value = ["API docs"]
         mock_generate_script.return_value = "export const EventReel = () => null;"
 
@@ -146,8 +153,7 @@ class TestPipelineIntegration:
         output_dir = tmp_path / "out"
 
         with patch("agents.renderer.REMOTION_DIR", remotion_dir), \
-             patch("agents.renderer.OUTPUT_DIR", output_dir), \
-             patch.dict("os.environ", {"ANTHROPIC_API_KEY": ""}):
+             patch("agents.renderer.OUTPUT_DIR", output_dir):
 
             final_state = pipeline.invoke(initial_state)
 
