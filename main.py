@@ -153,18 +153,40 @@ Examples:
     final_state = run_pipeline(args.prompt, args.images_dir, args.max_images)
     print_summary(final_state)
 
+    # Automatically persist outputs to the output directory after each run
+    output_dir = Path(os.getenv("OUTPUT_DIR", "./out")).resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    def _default(obj):
+        if hasattr(obj, "model_dump"):
+            return obj.model_dump()
+        raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+
+    print(f"\n💾 Saving pipeline artifacts to {output_dir}...")
+
+    # 1. Save Storyboard if generated
+    if final_state.get("storyboard"):
+        storyboard_path = output_dir / "storyboard.json"
+        with open(storyboard_path, "w") as f:
+            json.dump(final_state["storyboard"].model_dump(), f, indent=2)
+        print(f"  - Storyboard saved to {storyboard_path}")
+
+    # 2. Save Remotion Script if generated
+    if final_state.get("remotion_script"):
+        script_path = output_dir / "EventReel.tsx"
+        script_path.write_text(final_state["remotion_script"], encoding="utf-8")
+        print(f"  - Remotion Script saved to {script_path}")
+
+    # 3. Save Final Pipeline State
+    state_path = output_dir / "pipeline_state.json"
+    with open(state_path, "w") as f:
+        json.dump(final_state, f, indent=2, default=_default)
+    print(f"  - Final Pipeline State saved to {state_path}")
+
     if args.output_json:
-        # Serialize to JSON (Pydantic models → dicts)
-        import dataclasses
-
-        def _default(obj):
-            if hasattr(obj, "model_dump"):
-                return obj.model_dump()
-            raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
-
         with open(args.output_json, "w") as f:
             json.dump(final_state, f, indent=2, default=_default)
-        print(f"\n📄 State written to {args.output_json}")
+        print(f"📄 Additional State written to {args.output_json}")
 
 
 if __name__ == "__main__":
