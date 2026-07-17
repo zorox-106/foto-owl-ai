@@ -97,3 +97,64 @@ The repository includes a complete test suite with unit tests for every agent an
 ```bash
 pytest tests/ -v
 ```
+
+## Pipeline Artifacts & Visuals
+
+Here is a visual overview of the pipeline's outputs and structures:
+
+### 1. Example Rendered Video Frame
+Below is an example frame showing a wedding scene with the opening text overlay:
+
+![Rendered Video Frame](assets/rendered_video_frame.png)
+
+### 2. Output Folder Structure
+After execution, the `out/` folder is structured as follows:
+```text
+out/
+├── Wedding_Highlights.mp4    # Rendered MP4 video output (11.3 MB)
+├── storyboard.json           # Narrative storyboard driving the rendering
+├── EventReel.tsx             # Generated Remotion TypeScript script
+└── pipeline_state.json       # Full serialized state from the LangGraph run
+```
+
+### 3. Example Storyboard Configuration (`storyboard.json`)
+The generated storyboard contains metadata and scene descriptions mapping images to transitions/animations:
+
+```json
+{
+  "title": "Wedding Highlights",
+  "total_duration_seconds": 45.0,
+  "narrative_arc": "open → build → close",
+  "scenes": [
+    {
+      "order": 0,
+      "image_path": "AHD_6008.jpg",
+      "duration_seconds": 6.0,
+      "caption": null,
+      "transition_in": "fade",
+      "animation": "ken_burns",
+      "scene_note": "Establishing moment"
+    },
+    {
+      "order": 1,
+      "image_path": "AHD_6020.jpg",
+      "duration_seconds": 5.0,
+      "caption": "Their love shines bright",
+      "transition_in": "dissolve",
+      "animation": "zoom_in",
+      "scene_note": "Building emotional resonance"
+    },
+    {
+      "order": 2,
+      "image_path": "AHD_6024.jpg",
+      "duration_seconds": 6.0,
+      "caption": null,
+      "transition_in": "fade",
+      "animation": "static",
+      "scene_note": "Climactic moment"
+    }
+  ],
+  "opening_text": "A moment to remember",
+  "closing_text": "Forever begins"
+}
+```
