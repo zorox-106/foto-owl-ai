@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "foto-owl-pipeline"
+version = "0.1.0"
+description = "FotoOwl Image-to-Video Multiagent Pipeline"
+requires-python = ">=3.11"
+dependencies = [
+    "langgraph>=0.2.28",
+    "langchain>=0.2.16",
+    "langchain-openai>=0.1.22",
+    "langchain-anthropic>=0.1.23",
+    "langchain-community>=0.2.16",
+    "chromadb>=0.5.20",
+    "openai>=1.40.0",
+    "anthropic>=0.34.0",
+    "instructor>=1.4.0",
+    "pydantic>=2.8.0",
+    "python-dotenv>=1.0.1",
+    "Pillow>=10.4.0",
+    "tenacity>=8.5.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-mock>=3.14.0",
+]
+
+[project.scripts]
+foto-owl = "main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["agents", "graph", "models", "rag"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

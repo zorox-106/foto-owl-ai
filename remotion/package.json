@@ -1,0 +1,21 @@
+{
+  "name": "foto-owl-remotion",
+  "version": "1.0.0",
+  "description": "FotoOwl Remotion video project",
+  "scripts": {
+    "start": "npx remotion studio",
+    "build": "npx remotion bundle",
+    "render": "npx remotion render EventReel ../out/output.mp4"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "remotion": "^4.0.0",
+    "@remotion/bundler": "^4.0.0",
+    "@remotion/renderer": "^4.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0",
+    "@types/react": "^18.2.0"
+  }
+}
