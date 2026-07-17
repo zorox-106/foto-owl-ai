@@ -48,13 +48,14 @@ def renderer_agent(state: PipelineState) -> dict:
     safe_title = storyboard.title.replace(" ", "_").replace("/", "-")[:40]
     output_path = OUTPUT_DIR / f"{safe_title}.mp4"
 
-    # 4. Run remotion render
+    # 4. Run remotion render — prefer local binary to avoid npx resolution issues
+    local_bin = REMOTION_DIR / "node_modules" / ".bin" / "remotion"
+    remotion_cmd = str(local_bin) if local_bin.exists() else "npx remotion"
     print(f"[Renderer] Starting Remotion render → {output_path}")
     cmd = [
-        "npx", "remotion", "render",
+        remotion_cmd, "render",
         "EventReel",
-        str(output_path),
-        "--props", "{}",
+        str(output_path.resolve()),
     ]
 
     try:

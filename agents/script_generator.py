@@ -125,19 +125,54 @@ def _generate_with_anthropic(prompt: str, rag_context: str) -> str:
 
     response = client.messages.create(
         model=model,
-        max_tokens=8192,
+        max_tokens=4096,
         system=_SYSTEM_ANTHROPIC + f"\n\n=== REMOTION API REFERENCE ===\n{rag_context}",
         messages=[
             {"role": "user", "content": f"Generate the Remotion composition script:\n\n{prompt}"}
         ],
     )
-    return response.content[0].text  # type: ignore[index]
+    return _clean_script(response.content[0].text)  # type: ignore[index]
 
 
 def _generate_with_openai(prompt: str, rag_context: str) -> str:
-    from openai import OpenAI
-    client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-    model = "gpt-4o"
+    import time
+    from openai import OpenAI, RateLimitError
+    # Honour OPENAI_BASE_URL so Groq / other OpenAI-compatible providers work
+    base_url = os.environ.get("OPENAI_BASE_URL")
+    client = OpenAI(api_key=os.environ["OPENAI_API_KEY"], base_url=base_url)
+    model = os.getenv("SCRIPT_GENERATOR_MODEL", "gpt-4o")
+
+    for attempt in range(3):
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": _SYSTEM_OPENAI + f"\n\n=== REMOTION API REFERENCE ===\n{rag_context}",
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Generate the Remotion composition script:\n\n{prompt}",
+                    },
+                ],
+                max_tokens=4096,
+            )
+            return _clean_script(response.choices[0].message.content or "")
+        except RateLimitError as e:
+            wait = 25 * (attempt + 1)  # 25s, 50s, 75s
+            print(f"[ScriptGenerator] Rate limit hit — waiting {wait}s before retry {attempt + 1}/3...")
+            time.sleep(wait)
+    # Last attempt without catching
+    response = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": _SYSTEM_OPENAI + f"\n\n=== REMOTION API REFERENCE ===\n{rag_context}"},
+            {"role": "user", "content": f"Generate the Remotion composition script:\n\n{prompt}"},
+        ],
+        max_tokens=4096,
+    )
+    return _clean_script(response.choices[0].message.content or "")
 
     response = client.chat.completions.create(
         model=model,
@@ -151,9 +186,24 @@ def _generate_with_openai(prompt: str, rag_context: str) -> str:
                 "content": f"Generate the Remotion composition script:\n\n{prompt}",
             },
         ],
-        max_tokens=8192,
+        max_tokens=4096,
     )
-    return response.choices[0].message.content or ""
+    return _clean_script(response.choices[0].message.content or "")
+
+
+def _clean_script(script: str) -> str:
+    """Strip markdown fences and patch common LLM omissions."""
+    import re
+    # Remove markdown code fences (```typescript, ```tsx, ```)
+    script = re.sub(r'^```[\w]*\n?', '', script.strip(), flags=re.MULTILINE)
+    script = re.sub(r'\n?```$', '', script.strip(), flags=re.MULTILINE)
+    script = script.strip()
+
+    # Ensure React is imported (required for JSX in TS strict mode)
+    if "React" in script and "import React" not in script:
+        script = "import React from 'react';\n" + script
+
+    return script
 
 
 def script_generator_agent(state: PipelineState) -> dict:

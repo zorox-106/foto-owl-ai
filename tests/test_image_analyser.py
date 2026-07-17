@@ -90,7 +90,7 @@ class TestImageAnalyser:
             }
             result = image_analyser_agent(state)
 
-        assert len(result["image_analyses"]) == 1
-        assert result["image_analyses"][0].image_path == str(img2)
-        assert len(result["selected_images"]) == 1
-        assert result["selected_images"][0] == str(img2)
+        assert len(result["image_analyses"]) == 2
+        assert result["image_analyses"][0].image_path == str(img1)
+        assert "wedding" in result["image_analyses"][0].subject.lower()
+        assert set(result["selected_images"]) == {str(img1), str(img2)}

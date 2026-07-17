@@ -8,13 +8,15 @@
     "render": "npx remotion render EventReel ../out/output.mp4"
   },
   "dependencies": {
+    "@remotion/bundler": "^4.0.0",
+    "@remotion/cli": "^4.0.490",
+    "@remotion/renderer": "^4.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "remotion": "^4.0.0",
-    "@remotion/bundler": "^4.0.0",
-    "@remotion/renderer": "^4.0.0"
+    "remotion": "^4.0.0"
   },
   "devDependencies": {
+    "@remotion/cli": "^4.0.490",
     "typescript": "^5.3.0",
     "@types/react": "^18.2.0"
   }

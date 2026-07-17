@@ -14,7 +14,45 @@ from pathlib import Path
 from typing import List, Literal
 
 import chromadb
-from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction
+from chromadb.api.types import Documents, Embeddings
+
+class KeywordEmbeddingFunction:
+    """A deterministic, zero-dependency embedding function for event styles and Remotion APIs.
+    Maps input texts to 384-dimensional keyword-frequency vectors to eliminate network timeouts.
+    """
+    DIM = 384
+    KEYWORDS = [
+        "cinematic", "slow", "emotional", "film",
+        "upbeat", "fast", "energetic", "pulse", "tempo",
+        "corporate", "professional", "clean", "brand",
+        "sports", "highlights", "action", "athletic", "play",
+        "composition", "registerroot", "remotionroot", "fps", "durationinframes",
+        "sequence", "from", "layout", "offset",
+        "interpolate", "usecurrentframe", "extrapolate", "clamp", "opacity", "scale",
+        "staticfile", "img", "preload", "public", "photos",
+        "absolutefill", "spring", "damping", "stiffness", "caption", "overlay"
+    ]
+
+    def __call__(self, input: Documents) -> Embeddings:
+        embeddings = []
+        for text in input:
+            vector = [0.0] * self.DIM
+            text_lower = text.lower()
+            for idx, keyword in enumerate(self.KEYWORDS):
+                if keyword in text_lower:
+                    vector[idx] = 1.0
+            embeddings.append(vector)
+        return embeddings
+
+    def embed_query(self, input: Documents) -> Embeddings:
+        """Called by Chroma during query — delegates to __call__."""
+        if isinstance(input, str):
+            input = [input]
+        return self.__call__(input)
+
+    def name(self) -> str:
+        return "keyword"
+
 
 CHROMA_DIR = os.getenv("CHROMA_PERSIST_DIR", "./chroma_db")
 DOCS_DIR = Path(__file__).parent / "documents"
@@ -22,11 +60,8 @@ DOCS_DIR = Path(__file__).parent / "documents"
 Collection = Literal["style_guides", "remotion_api"]
 
 
-def _embedding_fn() -> OpenAIEmbeddingFunction:
-    return OpenAIEmbeddingFunction(
-        api_key=os.environ["OPENAI_API_KEY"],
-        model_name="text-embedding-3-small",
-    )
+def _embedding_fn() -> KeywordEmbeddingFunction:
+    return KeywordEmbeddingFunction()
 
 
 def _client() -> chromadb.PersistentClient:

@@ -27,7 +27,7 @@ from models import oai
 from models.state import CompileError, FailureReport, PipelineState
 from rag import retrieve
 
-MAX_RETRIES = int(os.getenv("MAX_RETRIES", "3"))
+MAX_RETRIES = int(os.getenv("MAX_RETRIES", "5"))
 
 _FIX_SYSTEM = """You are a Remotion TypeScript expert.
 You are given a Remotion composition script that has TypeScript compilation errors.
@@ -79,31 +79,48 @@ def _classify_error(message: str) -> CompileError:
 
 
 def _run_tsc(script: str) -> List[str]:
-    """Write script to a temp dir and run `tsc --noEmit`. Returns list of error strings."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        script_path = Path(tmpdir) / "EventReel.tsx"
-        tsconfig_path = Path(tmpdir) / "tsconfig.json"
-        script_path.write_text(script, encoding="utf-8")
-        tsconfig_path.write_text(_TSCONFIG, encoding="utf-8")
+    """Write script into the Remotion project and run tsc from there.
 
-        # Check if tsc is available; if not, do a basic syntax check
+    Running tsc inside the Remotion project ensures remotion's type definitions
+    (installed via npm) are available, preventing false 'module not found' errors.
+    Falls back to a basic syntax check if the project isn't set up yet.
+    """
+    remotion_dir = Path(os.environ.get("REMOTION_PROJECT_DIR", "./remotion"))
+
+    if not (remotion_dir / "node_modules").exists():
+        print("[Compiler] ⚠️  Remotion node_modules not found — running basic syntax check")
+        return _basic_syntax_check(script)
+
+    # Write the script to the Remotion src dir temporarily
+    script_path = remotion_dir / "src" / "EventReel.tsx"
+    try:
+        original = script_path.read_text(encoding="utf-8") if script_path.exists() else None
+        script_path.write_text(script, encoding="utf-8")
+
         try:
             result = subprocess.run(
-                ["npx", "tsc", "--noEmit", "--project", str(tsconfig_path)],
+                ["npx", "tsc", "--noEmit"],
                 capture_output=True,
                 text=True,
                 timeout=60,
-                cwd=tmpdir,
+                cwd=str(remotion_dir),
             )
             if result.returncode == 0:
                 return []
-            # Parse errors from stdout + stderr
             raw = (result.stdout + result.stderr).strip()
-            return [line for line in raw.splitlines() if line.strip()]
+            # Filter to only lines referencing EventReel.tsx to avoid irrelevant Root.tsx errors
+            errors = [
+                line for line in raw.splitlines()
+                if line.strip() and ("EventReel" in line or "error TS" in line)
+            ]
+            return errors or _basic_syntax_check(script)
         except FileNotFoundError:
-            # tsc not available — perform basic syntax check only
-            print("[Compiler] ⚠️  tsc not found — running basic syntax check")
+            print("[Compiler] ⚠️  npx not found — running basic syntax check")
             return _basic_syntax_check(script)
+    finally:
+        # Restore original placeholder if compilation failed
+        if original is not None:
+            script_path.write_text(original, encoding="utf-8")
 
 
 def _basic_syntax_check(script: str) -> List[str]:
@@ -135,30 +152,45 @@ def _fix_script(script: str, errors: List[CompileError]) -> str:
         for i, e in enumerate(errors)
     )
 
-    response = oai().client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": _FIX_SYSTEM},
-            {
-                "role": "user",
-                "content": (
-                    f"Fix the following TypeScript errors in this Remotion script:\n\n"
-                    f"=== ERRORS ===\n{error_text}\n\n"
-                    f"=== SCRIPT ===\n{script}"
-                ),
-            },
-        ],
-        max_tokens=8192,
-    )
-    return response.choices[0].message.content or script
+    from openai import OpenAI, RateLimitError
+    import time
+    base_url = os.environ.get("OPENAI_BASE_URL")
+    raw_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"], base_url=base_url)
+
+    for attempt in range(3):
+        try:
+            response = raw_client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": _FIX_SYSTEM},
+                    {
+                        "role": "user",
+                        "content": (
+                            f"Fix the following TypeScript errors in this Remotion script:\n\n"
+                            f"=== ERRORS ===\n{error_text}\n\n"
+                            f"=== SCRIPT ===\n{script}"
+                        ),
+                    },
+                ],
+                max_tokens=4096,
+            )
+            from agents.script_generator import _clean_script
+            return _clean_script(response.choices[0].message.content or script)
+        except RateLimitError:
+            wait = 25 * (attempt + 1)
+            print(f"[CompilerFixer] Rate limit — waiting {wait}s...")
+            time.sleep(wait)
+    from agents.script_generator import _clean_script
+    return _clean_script(script)
 
 
 def compiler_fixer_agent(state: PipelineState) -> dict:
     """Compile the script; on error, enrich with RAG context and fix."""
     script: str = state["remotion_script"]
     retry_count: int = state.get("retry_count", 0)
+    max_retries: int = state.get("max_retries", MAX_RETRIES)
 
-    print(f"[CompilerFixer] Attempt {retry_count + 1}/{MAX_RETRIES} — running tsc...")
+    print(f"[CompilerFixer] Attempt {retry_count + 1}/{max_retries} — running tsc...")
     raw_errors = _run_tsc(script)
 
     if not raw_errors:
@@ -172,8 +204,8 @@ def compiler_fixer_agent(state: PipelineState) -> dict:
     print(f"[CompilerFixer] ❌ {len(raw_errors)} error(s) found. Enriching with RAG...")
     compile_errors = [_classify_error(e) for e in raw_errors[:10]]  # cap at 10 errors
 
-    if retry_count + 1 >= MAX_RETRIES:
-        print(f"[CompilerFixer] Max retries ({MAX_RETRIES}) reached. Emitting failure report.")
+    if retry_count + 1 >= max_retries:
+        print(f"[CompilerFixer] Max retries ({max_retries}) reached. Emitting failure report.")
         report = FailureReport(
             total_retries=retry_count + 1,
             final_errors=compile_errors,

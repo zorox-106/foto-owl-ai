@@ -9,8 +9,13 @@ from anthropic import Anthropic
 
 @lru_cache(maxsize=1)
 def oai() -> instructor.Instructor:
-    """OpenAI client with instructor (structured output via function calling)."""
-    return instructor.from_openai(OpenAI(api_key=os.environ["OPENAI_API_KEY"]))
+    """OpenAI client with instructor (structured output via function calling).
+    Reads OPENAI_BASE_URL so Groq / other OpenAI-compatible providers work automatically.
+    """
+    base_url = os.environ.get("OPENAI_BASE_URL")
+    return instructor.from_openai(
+        OpenAI(api_key=os.environ["OPENAI_API_KEY"], base_url=base_url)
+    )
 
 
 @lru_cache(maxsize=1)
