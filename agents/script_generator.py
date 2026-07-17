@@ -106,6 +106,8 @@ Constraints:
 - Every scene must implement its animation using interpolate() and useCurrentFrame()
 - Implement fade transitions using opacity interpolation at scene boundaries (first/last 15 frames)
 - Do NOT create separate transition components (like FadeInTransition/FadeOutTransition) that reference undefined variables (like durationFrames). Either pass durationFrames/durationInFrames as props to them, or inline the opacity interpolation directly inside the SceneFrame/EventReel components.
+- If you declare any transition components with a children prop, make it optional (e.g. children?: React.ReactNode) so it doesn't fail compilation when invoked without children.
+- If you declare a static configurations array (like const SCENES = [...]), always append 'as const' at the end (e.g. const SCENES = [...] as const;) to prevent TypeScript string-assignability type errors on literal properties like animation.
 - Ken Burns: scale interpolated from 1.0 → 1.08 over scene duration
 - Slide in: translateX from 10% → 0% over 20 frames
 - Captions: positioned at bottom-center with textShadow, animated opacity in

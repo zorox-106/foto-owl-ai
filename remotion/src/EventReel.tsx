@@ -1,42 +1,54 @@
 import React from 'react';
-import { AbsoluteFill, Sequence, Img, interpolate, spring, useCurrentFrame, useVideoConfig, staticFile } from 'remotion';
-
-const opening_text = 'A Moment in Time';
-const closing_text = 'Forever Entwined';
+import {
+  AbsoluteFill,
+  Sequence,
+  Img,
+  interpolate,
+  spring,
+  useCurrentFrame,
+  useVideoConfig,
+  staticFile,
+} from 'remotion';
 
 const SCENES = [
   {
     image: 'AHD_6008.jpg',
-    startFrame: 0,
     durationFrames: 180,
     animation: 'ken_burns',
     caption: null,
   },
   {
     image: 'AHD_6020.jpg',
-    startFrame: 180,
     durationFrames: 150,
-    animation: 'zoom_in',
-    caption: 'Their love story unfolds',
+    animation: 'ken_burns',
+    caption: 'Their love shines bright',
   },
   {
     image: 'AHD_6024.jpg',
-    startFrame: 330,
     durationFrames: 180,
-    animation: 'static',
+    animation: 'ken_burns',
     caption: null,
   },
-];
+] as const;
 
-const SceneFrame = ({ image, durationFrames, animation, caption }: { image: string; durationFrames: number; animation: string; caption: string | null }) => {
+const opening_text = 'A moment of forever';
+const closing_text = 'Congratulations to the happy couple';
+
+const SceneFrame: React.FC<{
+  image: string;
+  durationFrames: number;
+  animation: 'ken_burns';
+  caption: string | null;
+}> = ({ image, durationFrames, animation, caption }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const opacity = interpolate(frame, [0, 15], [0, 1], { extrapolateRight: 'clamp' });
-  const scale = animation === 'ken_burns' ? interpolate(frame, [0, durationFrames], [1, 1.08], { extrapolateRight: 'clamp' }) : 1;
-  const style = { transform: `scale(${scale})`, transformOrigin: 'center center' };
+
+  const scale = interpolate(frame, [0, durationFrames], [1, 1.08], {
+    extrapolateRight: 'clamp',
+  });
 
   return (
-    <AbsoluteFill style={{ justifyContent: 'center', alignItems: 'center' }}>
+    <AbsoluteFill>
       <Img
         src={staticFile(image)}
         style={{
@@ -44,19 +56,26 @@ const SceneFrame = ({ image, durationFrames, animation, caption }: { image: stri
           height: '100%',
           objectFit: 'cover',
           objectPosition: 'center',
-          opacity,
-          ...style,
+          transform: `scale(${scale})`,
         }}
       />
       {caption && (
-        <AbsoluteFill style={{ justifyContent: 'flex-end', alignItems: 'center', paddingBottom: 60 }}>
+        <AbsoluteFill
+          style={{
+            justifyContent: 'flex-end',
+            alignItems: 'center',
+            paddingBottom: 60,
+          }}
+        >
           <div
             style={{
               color: 'white',
               fontSize: 42,
               fontFamily: 'sans-serif',
               textShadow: '0 2px 8px rgba(0,0,0,0.8)',
-              opacity: interpolate(frame, [0, 20], [0, 1], { extrapolateRight: 'clamp' }),
+              opacity: interpolate(frame, [0, 20], [0, 1], {
+                extrapolateRight: 'clamp',
+              }),
             }}
           >
             {caption}
@@ -67,63 +86,106 @@ const SceneFrame = ({ image, durationFrames, animation, caption }: { image: stri
   );
 };
 
-const OpeningText = () => {
+const FadeInTransition: React.FC<{
+  children: React.ReactNode;
+  durationInFrames: number;
+}> = ({ children, durationInFrames }) => {
   const frame = useCurrentFrame();
-  const opacity = interpolate(frame, [0, 30], [0, 1], { extrapolateRight: 'clamp' });
+
+  const opacity = interpolate(frame, [0, durationInFrames], [0, 1], {
+    extrapolateRight: 'clamp',
+  });
 
   return (
-    <AbsoluteFill style={{ justifyContent: 'center', alignItems: 'center' }}>
-      <div
-        style={{
-          color: 'white',
-          fontSize: 64,
-          fontFamily: 'sans-serif',
-          textShadow: '0 2px 8px rgba(0,0,0,0.8)',
-          opacity,
-        }}
-      >
-        {opening_text}
-      </div>
+    <AbsoluteFill style={{ opacity }}>
+      {children}
     </AbsoluteFill>
   );
 };
 
-const ClosingText = () => {
+const FadeOutTransition: React.FC<{
+  children: React.ReactNode;
+  durationOutFrames: number;
+}> = ({ children, durationOutFrames }) => {
   const frame = useCurrentFrame();
   const { durationInFrames } = useVideoConfig();
-  const opacity = interpolate(frame, [durationInFrames - 30, durationInFrames], [1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+
+  const opacity = interpolate(
+    frame,
+    [durationInFrames - durationOutFrames, durationInFrames],
+    [1, 0],
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
+  );
 
   return (
-    <AbsoluteFill style={{ justifyContent: 'center', alignItems: 'center' }}>
-      <div
-        style={{
-          color: 'white',
-          fontSize: 64,
-          fontFamily: 'sans-serif',
-          textShadow: '0 2px 8px rgba(0,0,0,0.8)',
-          opacity,
-        }}
-      >
-        {closing_text}
-      </div>
+    <AbsoluteFill style={{ opacity }}>
+      {children}
     </AbsoluteFill>
   );
 };
 
-export const EventReel: React.FC = () => (
-  <AbsoluteFill style={{ backgroundColor: '#000' }}>
-    <Sequence from={0} durationInFrames={30}>
-      <OpeningText />
-    </Sequence>
-    {SCENES.map((scene, i) => (
-      <Sequence key={i} from={scene.startFrame} durationInFrames={scene.durationFrames}>
-        <SceneFrame {...scene} />
-      </Sequence>
-    ))}
-    <Sequence from={1350 - 30} durationInFrames={30}>
-      <ClosingText />
-    </Sequence>
-  </AbsoluteFill>
-);
+export const EventReel: React.FC = () => {
+  return (
+    <AbsoluteFill style={{ backgroundColor: '#000' }}>
+      {opening_text && (
+        <Sequence from={0} durationInFrames={30}>
+          <AbsoluteFill
+            style={{
+              justifyContent: 'center',
+              alignItems: 'center',
+              fontSize: 60,
+              fontFamily: 'sans-serif',
+              color: 'white',
+              textShadow: '0 2px 8px rgba(0,0,0,0.8)',
+            }}
+          >
+            {opening_text}
+          </AbsoluteFill>
+        </Sequence>
+      )}
+      {SCENES.map((scene, i) => (
+        <Sequence
+          key={i}
+          from={i === 0 ? 0 : SCENES.slice(0, i).reduce((acc, s) => acc + s.durationFrames, 0)}
+          durationInFrames={scene.durationFrames}
+        >
+          {i > 0 && (
+            <FadeInTransition durationInFrames={15}>
+              <SceneFrame {...scene} />
+            </FadeInTransition>
+          )}
+          {i === 0 ? (
+            <SceneFrame {...scene} />
+          ) : (
+            <FadeOutTransition durationOutFrames={15}>
+              <SceneFrame {...scene} />
+            </FadeOutTransition>
+          )}
+        </Sequence>
+      ))}
+      {closing_text && (
+        <Sequence
+          from={
+            SCENES.reduce((acc, s) => acc + s.durationFrames, 0) - 30
+          }
+          durationInFrames={30}
+        >
+          <AbsoluteFill
+            style={{
+              justifyContent: 'center',
+              alignItems: 'center',
+              fontSize: 60,
+              fontFamily: 'sans-serif',
+              color: 'white',
+              textShadow: '0 2px 8px rgba(0,0,0,0.8)',
+            }}
+          >
+            {closing_text}
+          </AbsoluteFill>
+        </Sequence>
+      )}
+    </AbsoluteFill>
+  );
+};
 
 export default EventReel;
