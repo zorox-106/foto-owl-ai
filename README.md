@@ -24,31 +24,42 @@ graph TD
 
 ## Project Structure
 
-- `agents/`: The five pipeline agents + intent parser:
+- `agents/`: The five pipeline agents:
   - `intent_parser.py`: Parses the raw user prompt into a structured creative brief.
-  - `image_analyser.py`: Uses a vision model (`gpt-4o`) to score image quality and relevance.
-  - `storyboard_writer.py`: Creates a narrative storyboard with transitions and animations.
-  - `script_generator.py`: Generates the Remotion composition code using Claude Sonnet.
-  - `compiler_fixer.py`: Compiles the TSX script and runs an iterative fix loop on compilation errors.
-  - `renderer.py`: Invokes the Remotion CLI to render the composition.
-- `graph/`: LangGraph orchestrator state-machine.
-- `models/`: Shared Pydantic schemas and LLM clients.
-- `rag/`: ChromaDB local vector store for loading style guides and Remotion code reference snippets.
+  - `image_analyser.py`: Scores image quality and relevance using a vision-capable model. Falls back to heuristic descriptions when the configured key does not support vision.
+  - `storyboard_writer.py`: Creates a narrative storyboard with transitions, animations, and timing.
+  - `script_generator.py`: Generates the Remotion TypeScript composition from the storyboard.
+  - `compiler_fixer.py`: Compiles the TSX script via `tsc` and runs an iterative LLM fix loop on errors.
+  - `renderer.py`: Invokes the Remotion CLI to render the final MP4.
+- `graph/`: LangGraph StateGraph orchestrator.
+- `models/`: Pydantic state schemas and the **model routing layer**:
+  - `model_router.py`: Central dispatch — `get_intent_model()`, `get_vision_model()`, `get_storyboard_model()`, `get_script_model()`, `get_fixer_model()`.
+  - `openai_provider.py`: Cached OpenAI and Anthropic client factories.
+  - `groq_provider.py`: Cached Groq (OpenAI-compatible) client factory.
+- `rag/`: ChromaDB local vector store with style guides and Remotion API reference snippets.
 - `remotion/`: The React-based Remotion video composition project.
-- `tests/`: A full, mocked unit and integration test suite.
-- `main.py`: The pipeline CLI command runner.
+- `tests/`: Full mocked unit and integration test suite (14 tests).
+- `main.py`: The pipeline CLI entry point.
 
-## Model Selection Rationale
+## Model Selection & Configuration
 
-The architecture follows a hybrid multi-model strategy to balance **cost, latency, and quality** across distinct agent steps:
+### How the Model Router Works
 
-| Agent | Default Model | Override Model (Groq) | Cost | Latency | Quality / Rationale |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **Intent Parser** | `gpt-4o-mini` | `llama-4-scout-17b` | Very Low | Low | Straightforward text classification and extraction. Smaller models handle structured JSON parsing perfectly at a fraction of the cost. |
-| **Image Analyser** | `gpt-4o` | `llama-4-scout-17b` | High | High | Vision capability is required. Requires high quality spatial/aesthetic understanding of images to construct narrative cues. Falls back to text heuristics when using keys without vision. |
-| **Storyboard Writer** | `gpt-4o-mini` | `llama-4-scout-17b` | Low | Medium | Pure reasoning and sequence construction. Since images are already described, no vision is needed. Uses structured Pydantic formatting to map out the visual sequence. |
-| **Script Generator** | Claude Sonnet | `llama-4-scout-17b` | High | High | Highly complex TSX code generation. Remotion-specific API rules are loaded from RAG, demanding a large context window and strong syntax compliance to minimize compile errors. |
-| **Compiler & Fixer** | `gpt-4o-mini` | `llama-4-scout-17b` | Low | Low | Targeted diff repair. Relies on structured error traces and targeted code fixes. A fast, low-latency model is perfect for iterative compiler feedback loops. |
+No model or provider is hard-coded inside any agent. Instead, every agent calls a function from `models/model_router.py` (e.g. `get_intent_model()`) that returns a `(client, model_name)` tuple. The router reads `OPENAI_BASE_URL` and `OPENAI_API_KEY` at runtime to decide which provider to use, then falls back to sensible defaults.
+
+This means you can **switch the entire pipeline from OpenAI → Groq → any OpenAI-compatible provider** by changing two lines in `.env` — with no code changes.
+
+### Default Model Assignments
+
+The table below shows the defaults when using each provider. Every value in the **Env Var** column can be overridden independently:
+
+| Agent | Env Var | OpenAI Default | Groq Default | Rationale |
+| :--- | :--- | :--- | :--- | :--- |
+| **Intent Parser** | `INTENT_PARSER_MODEL` | `gpt-4o-mini` | `llama-4-scout-17b-16e-instruct` | Simple classification/extraction. A small, fast model is sufficient and keeps cost minimal. |
+| **Image Analyser** | `IMAGE_ANALYSER_MODEL` | `gpt-4o` | `llama-4-scout-17b-16e-instruct` | Requires vision capability. A capable multimodal model is needed for spatial and aesthetic understanding. Falls back to text heuristics when the active key does not support vision (e.g. Groq `gsk_` keys). |
+| **Storyboard Writer** | `STORYBOARD_MODEL` | `gpt-4o-mini` | `llama-4-scout-17b-16e-instruct` | Pure structured reasoning — images are already described, so no vision is needed. RAG-provided style guides compensate for reduced model capability. |
+| **Script Generator** | `SCRIPT_GENERATOR_MODEL` | `claude-sonnet-4-5` *(Anthropic)* | `llama-4-scout-17b-16e-instruct` | Most complex task: long-form TypeScript with niche framework APIs. Claude Sonnet is preferred when `ANTHROPIC_API_KEY` is set; otherwise falls back to the OpenAI/Groq client. |
+| **Compiler & Fixer** | `COMPILER_FIXER_MODEL` | `gpt-4o-mini` | `llama-4-scout-17b-16e-instruct` | Targeted diff repair from structured error traces. Fast, cheap, iterative — a smaller model is ideal. |
 
 ## Setup and Installation
 
@@ -70,6 +81,56 @@ The architecture follows a hybrid multi-model strategy to balance **cost, latenc
    ```bash
    cp .env.example .env
    ```
+
+## Configuration Reference
+
+All configuration is driven by environment variables in `.env`. None of these have to match a specific provider — the model router adapts automatically.
+
+```bash
+# ── Provider ──────────────────────────────────────────────────────────────────
+OPENAI_API_KEY=sk-...               # OpenAI key (or a Groq gsk_... key)
+OPENAI_BASE_URL=https://api.groq.com/openai/v1   # Set to redirect to Groq / any OpenAI-compatible API
+ANTHROPIC_API_KEY=sk-ant-...        # Optional. If set, Script Generator uses Claude Sonnet.
+
+# ── Model overrides (optional — defaults shown for OpenAI provider) ──────────
+INTENT_PARSER_MODEL=gpt-4o-mini
+IMAGE_ANALYSER_MODEL=gpt-4o
+STORYBOARD_MODEL=gpt-4o-mini
+SCRIPT_GENERATOR_MODEL=claude-sonnet-4-5
+COMPILER_FIXER_MODEL=gpt-4o-mini
+
+# ── Pipeline settings ────────────────────────────────────────────────────────
+IMAGES_DIR=./images                 # Source photos directory
+MAX_IMAGES=12                       # Max images to analyse (cost control)
+MAX_RETRIES=3                       # Compiler retry limit
+OUTPUT_DIR=./out                    # Output folder for MP4, storyboard, and state
+
+# ── Remotion ──────────────────────────────────────────────────────────────────
+REMOTION_PROJECT_DIR=./remotion
+
+# ── RAG ───────────────────────────────────────────────────────────────────────
+CHROMA_PERSIST_DIR=./chroma_db
+
+# ── Tracing (optional) ────────────────────────────────────────────────────────
+LANGSMITH_API_KEY=lsv2_...
+LANGSMITH_TRACING=false
+LANGSMITH_PROJECT=foto-owl-pipeline
+```
+
+### Example: Switching to Groq
+
+To run the full pipeline on Groq (no Anthropic key required):
+```bash
+OPENAI_API_KEY=gsk_your_groq_key
+OPENAI_BASE_URL=https://api.groq.com/openai/v1
+INTENT_PARSER_MODEL=llama-4-scout-17b-16e-instruct
+STORYBOARD_MODEL=llama-4-scout-17b-16e-instruct
+SCRIPT_GENERATOR_MODEL=llama-4-scout-17b-16e-instruct
+COMPILER_FIXER_MODEL=llama-4-scout-17b-16e-instruct
+# IMAGE_ANALYSER_MODEL is unused on Groq — vision falls back to text heuristics.
+```
+
+> **Note:** When `OPENAI_API_KEY` starts with `gsk_`, the Image Analyser automatically skips the vision API call and uses heuristic image descriptions instead, since Groq does not support base64 image uploads.
 
 ## Usage
 
