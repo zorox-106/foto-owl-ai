@@ -105,12 +105,15 @@ Constraints:
 - All images must be loaded via staticFile('<filename>') — just the basename, no path
 - Every scene must implement its animation using interpolate() and useCurrentFrame()
 - Implement fade transitions using opacity interpolation at scene boundaries (first/last 15 frames)
+- Do NOT create separate transition components (like FadeInTransition/FadeOutTransition) that reference undefined variables (like durationFrames). Either pass durationFrames/durationInFrames as props to them, or inline the opacity interpolation directly inside the SceneFrame/EventReel components.
 - Ken Burns: scale interpolated from 1.0 → 1.08 over scene duration
 - Slide in: translateX from 10% → 0% over 20 frames
 - Captions: positioned at bottom-center with textShadow, animated opacity in
-- Include an opening title card if opening_text is provided
-- Include a closing card if closing_text is provided
-- The composition must be exported as the DEFAULT export named EventReel
+- If opening_text is provided (and is not 'None'), define it as a local constant variable inside or outside EventReel (e.g. const opening_text = "...") and use it. Do NOT reference it unless it is defined.
+- If closing_text is provided (and is not 'None'), define it as a local constant variable inside or outside EventReel (e.g. const closing_text = "...") and use it. Do NOT reference it unless it is defined.
+- The main composition component must be declared as: export const EventReel: React.FC = () => { ... }
+- At the bottom of the file, export it as default: export default EventReel;
+- Do NOT add redundant declarations or assignments like export const EventReel = EventReel; at the end.
 - Register the composition with id="EventReel", fps=30, width=1920, height=1080
 - The durationInFrames must equal the exact sum of all scene durations in frames
 """)
@@ -202,6 +205,16 @@ def _clean_script(script: str) -> str:
     # Ensure React is imported (required for JSX in TS strict mode)
     if "React" in script and "import React" not in script:
         script = "import React from 'react';\n" + script
+
+    # Ensure EventReel is exported as a named export
+    script = re.sub(r'(?<!export\s)const\s+EventReel', 'export const EventReel', script)
+
+    # Clean up duplicate export const EventReel = EventReel statement if the LLM outputted it
+    script = re.sub(r'export\s+const\s+EventReel\s*=\s*EventReel;?', '', script)
+
+    # Ensure EventReel is exported as a default export
+    if "export default" not in script and "EventReel" in script:
+        script += "\n\nexport default EventReel;\n"
 
     return script
 

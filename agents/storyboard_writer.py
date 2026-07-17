@@ -29,7 +29,8 @@ Rules:
 - Scenes must be ordered narratively (not just chronologically).
 - Total duration must equal the sum of all scene durations.
 - Scene durations must reflect the pacing: slow→4–6s each, medium→2–4s, fast→1–2s.
-- Transitions and animations must match the visual style.
+- transition_in must be EXACTLY one of: "fade", "cut", "slide", "zoom", "dissolve".
+- animation must be EXACTLY one of: "ken_burns", "zoom_in", "zoom_out", "static", "slide_in".
 - Include an opening_text and closing_text appropriate to the event type.
 - Caption every 2nd or 3rd scene max; never caption every scene.
 """
