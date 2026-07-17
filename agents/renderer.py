@@ -16,8 +16,8 @@ from pathlib import Path
 
 from models.state import PipelineState
 
-REMOTION_DIR = Path(os.getenv("REMOTION_PROJECT_DIR", "./remotion"))
-OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", "./out"))
+REMOTION_DIR = Path(os.getenv("REMOTION_PROJECT_DIR", "./remotion")).resolve()
+OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", "./out")).resolve()
 
 
 def renderer_agent(state: PipelineState) -> dict:
@@ -48,15 +48,19 @@ def renderer_agent(state: PipelineState) -> dict:
     safe_title = storyboard.title.replace(" ", "_").replace("/", "-")[:40]
     output_path = OUTPUT_DIR / f"{safe_title}.mp4"
 
-    # 4. Run remotion render — prefer local binary to avoid npx resolution issues
+    # 4. Run remotion render — use absolute local binary path to avoid PATH issues with nvm/pyenv
     local_bin = REMOTION_DIR / "node_modules" / ".bin" / "remotion"
-    remotion_cmd = str(local_bin) if local_bin.exists() else "npx remotion"
+    if local_bin.exists():
+        remotion_bin = str(local_bin.resolve())
+    else:
+        # Fallback: try to find node on PATH and invoke the cli directly
+        remotion_bin = "npx"
+
     print(f"[Renderer] Starting Remotion render → {output_path}")
-    cmd = [
-        remotion_cmd, "render",
-        "EventReel",
-        str(output_path.resolve()),
-    ]
+    if remotion_bin == "npx":
+        cmd = ["npx", "remotion", "render", "EventReel", str(output_path)]
+    else:
+        cmd = [remotion_bin, "render", "EventReel", str(output_path)]
 
     try:
         result = subprocess.run(
