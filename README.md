@@ -2,6 +2,26 @@
 
 This repository implements a multiagent system orchestrated using **LangGraph** to convert a folder of event photos and a short text prompt into a rendered **Remotion** video reel.
 
+## Pipeline Architecture
+
+The workflow is modeled as a StateGraph with a double-loop compiler self-correction mechanism:
+
+```mermaid
+graph TD
+    Start([Start]) --> IP[Intent Parser]
+    IP --> IA[Image Analyser]
+    IA --> SW[Storyboard Writer]
+    SW --> SG[Script Generator]
+    SG --> CF[Compiler & Fixer]
+    
+    CF --> Route{"compile_success?"}
+    Route -- "Yes" --> R[Renderer]
+    Route -- "No (retry < max)" --> SG
+    Route -- "No (retry >= max)" --> FailEnd([END / Failure])
+    
+    R --> SuccessEnd([END / Success])
+```
+
 ## Project Structure
 
 - `agents/`: The five pipeline agents + intent parser:
