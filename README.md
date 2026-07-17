@@ -38,6 +38,18 @@ graph TD
 - `tests/`: A full, mocked unit and integration test suite.
 - `main.py`: The pipeline CLI command runner.
 
+## Model Selection Rationale
+
+The architecture follows a hybrid multi-model strategy to balance **cost, latency, and quality** across distinct agent steps:
+
+| Agent | Default Model | Override Model (Groq) | Cost | Latency | Quality / Rationale |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Intent Parser** | `gpt-4o-mini` | `llama-4-scout-17b` | Very Low | Low | Straightforward text classification and extraction. Smaller models handle structured JSON parsing perfectly at a fraction of the cost. |
+| **Image Analyser** | `gpt-4o` | `llama-4-scout-17b` | High | High | Vision capability is required. Requires high quality spatial/aesthetic understanding of images to construct narrative cues. Falls back to text heuristics when using keys without vision. |
+| **Storyboard Writer** | `gpt-4o-mini` | `llama-4-scout-17b` | Low | Medium | Pure reasoning and sequence construction. Since images are already described, no vision is needed. Uses structured Pydantic formatting to map out the visual sequence. |
+| **Script Generator** | Claude Sonnet | `llama-4-scout-17b` | High | High | Highly complex TSX code generation. Remotion-specific API rules are loaded from RAG, demanding a large context window and strong syntax compliance to minimize compile errors. |
+| **Compiler & Fixer** | `gpt-4o-mini` | `llama-4-scout-17b` | Low | Low | Targeted diff repair. Relies on structured error traces and targeted code fixes. A fast, low-latency model is perfect for iterative compiler feedback loops. |
+
 ## Setup and Installation
 
 1. Create a Python 3.11+ virtual environment and install the package:
